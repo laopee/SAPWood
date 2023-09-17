@@ -1,4 +1,7 @@
 # This code file contains major classes in SAPWood analysis
+import numpy as np
+import os as os
+
 
 # Earthquake class EQ
 class Earthquake:
