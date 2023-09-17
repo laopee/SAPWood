@@ -1,6 +1,12 @@
 # This code file contains major classes in SAPWood analysis
 
 # Earthquake class EQ
+class Earthquake:
+    def _init_(self,name)
+        self.name=name
+
+    def LoadEQ(self,filename)
+
 
 # Push-over class Push
 
