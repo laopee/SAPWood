@@ -17,11 +17,28 @@ class Earthquake:
 
 
     def LoadEQ(self,filename):  #this loads earthquake from a text file
-        temp=np.genfromtxt(filename,delimiter=' ', names=['c1','c2','c3','c4'])
-        self.t=temp['c1']
-        self.Ax=temp['c2']
-        self.Ay=temp['c3']
-        self.Az=temp['c4']
+        temp=np.loadtxt(filename)
+        ncol=temp.shap[1]
+        if ncol==2:
+            self.t=temp[:,0]
+            self.Ax=temp[:,1]
+            self.Ay=np.copy(self.Ax)  #fill other directions with 0
+            self.Ay.fill(0)
+            self.Az=np.copy(self.Ay)
+
+        elif ncol==3:
+            self.t=temp[:,0]
+            self.Ax=temp[:,1]
+            self.Ay=temp[:,2]
+            self.Az=np.copy(self.Ay)
+            self.Az.fill(0)
+        elif ncol==4:
+            self.t=temp[:,0]
+            self.Ax=temp[:,1]
+            self.Ay=temp[:,2]
+            self.Az=temp[:,3]
+        else:
+            print("something wrong with EQ file, pls check")
 
     def GetDt(self):
         return self.t[1]-self.t[0]
