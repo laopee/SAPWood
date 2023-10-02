@@ -5,10 +5,27 @@ import os as os
 
 # Earthquake class EQ
 class Earthquake:
-    def _init_(self,name)
-        self.name=name
 
-    def LoadEQ(self,filename)
+    def _init_(self):
+        self.name='Null'
+        self.Ax=np.array()
+        self.Ay=np.array()
+        self.Az=np.array()
+        self.t=np.array()
+        self.dir=3 #default to have all 3 directions
+        self.Unit='G' #default unit is in G 
+
+
+    def LoadEQ(self,filename):  #this loads earthquake from a text file
+        temp=np.genfromtxt(filename,delimiter=' ', names=['c1','c2','c3','c4'])
+        self.t=temp['c1']
+        self.Ax=temp['c2']
+        self.Ay=temp['c3']
+        self.Az=temp['c4']
+
+    def GetDt(self):
+        return self.t[1]-self.t[0]
+
 
 
 # Push-over class Push

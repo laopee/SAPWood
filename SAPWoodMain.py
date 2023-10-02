@@ -11,6 +11,15 @@ import matplotlib.pyplot as plt
 #Global variables
 EQ_current=SP.Earthquake()
 
+
+
+#Button functions
+def load_eq():
+    filename=tk.filedialog.askopenfilename()
+    EQ_current.LoadEQ(filename)
+    plt.plot(EQ_current.t,EQ_current.Ax)
+    plt.show()
+
 #GUIs
 root=tk.Tk()
 root.title=("load EQ file")
@@ -19,11 +28,3 @@ button_load=tk.Button(root,text="load", command=load_eq)
 button_load.pack()
 
 root.mainloop()
-
-#Button functions
-def load_eq():
-    filename=tk.filedialog.askopenfilename()
-    EQ_current.LoadEQ(filename)
-    plt.plot(EQ_current.t,EQ_current.Ax)
-    plt.show()
-    
