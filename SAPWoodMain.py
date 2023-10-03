@@ -6,6 +6,7 @@
 import SAPWoodClass as SP
 
 import tkinter as tk
+from tkinter import ttk
 import matplotlib.pyplot as plt
 
 #Global variables
@@ -21,25 +22,74 @@ def load_eq():
     print(EQ_current.Ay[5])
 
 def PlotAx():
-    plt.plot(EQ_current.t,EQ_current.Ax)
-    plt.show()
+    plot_xy_on_existing_canvas(Figure_Ax,EQ_current.t,EQ_current.Ax)
 
 def PlotAy():
     plt.plot(EQ_current.t,EQ_current.Ay)
     plt.show()
 
+#utility functions
+def plot_xy_on_existing_canvas(canvas, X, Y):
+    """
+    Plots the X-Y data points as a line plot on an existing Tkinter canvas.
+
+    Args:
+        canvas (tk.Canvas): The existing canvas where the plot will be drawn.
+        X (list): List of X coordinates.
+        Y (list): List of corresponding Y coordinates.
+    """
+    # Scale the data points to fit within the canvas
+    x_min, x_max = min(X), max(X)
+    y_min, y_max = min(Y), max(Y)
+
+    for i in range(len(X) - 1):
+        # Map X and Y to canvas coordinates for each pair of adjacent points
+        x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+
+        # Draw a line segment connecting adjacent data points
+        canvas.create_line(x1, y1, x2, y2, fill="blue")
+
+
+
 #All functions defined above, now do the GUIs
 
 #GUIs
 root=tk.Tk()
-root.title=("load EQ file")
+root.title=("NB Analysis")
 
-button_load=tk.Button(root,text="load", command=load_eq)
+# create all Tabs you need
+tabControl=ttk.Notebook(root)
+tab1=ttk.Frame(tabControl)
+tab2=ttk.Frame(tabControl)
+tab3=ttk.Frame(tabControl)
+
+tabControl.add(tab1,text='Analysis')
+tabControl.add(tab2,text='Results')
+tabControl.add(tab3,text='Funny stuff')
+
+tabControl.pack(expand=1, fill="both")
+
+# add controls in each tab
+# tab 1
+button_load=tk.Button(tab1,text="load", command=load_eq)
 button_load.pack()
 
-button_Px=tk.Button(root,text='plotX',command=PlotAx)
-button_Py=tk.Button(root,text='plotY',command=PlotAy)
+button_Px=tk.Button(tab1,text='plotX',command=PlotAx)
+button_Py=tk.Button(tab1,text='plotY',command=PlotAy)
 button_Px.pack()
 button_Py.pack()
+
+Figure_Ax = tk.Canvas(tab1, width=400, height=300)
+Figure_Ax.pack(fill=tk.X)
+
+# tab 2
+button_save=tk.Button(tab2,text="Save")
+button_save.pack()
+# tab 3
+button_game=tk.Button(tab3,text="Random ADV")
+button_game.pack()
 
 root.mainloop()

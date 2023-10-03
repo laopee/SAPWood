@@ -18,7 +18,7 @@ class Earthquake:
 
     def LoadEQ(self,filename):  #this loads earthquake from a text file
         temp=np.loadtxt(filename)
-        ncol=temp.shap[1]
+        ncol=temp.shape[1]
         if ncol==2:
             self.t=temp[:,0]
             self.Ax=temp[:,1]
