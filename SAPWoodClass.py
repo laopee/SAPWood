@@ -1,6 +1,7 @@
 # This code file contains major classes in SAPWood analysis
 import numpy as np
 import os as os
+import math
 
 
 # Earthquake class EQ
@@ -108,7 +109,7 @@ class Spring:
         self.CurrentIndx=0  # where spring is currently
 
     def SetParameter(self,inputP):
-        self.parameter=inputP  # this will be different for each spring type
+        pass  # this will be different for each spring type
 
     def init_tracker(self):
         pass
@@ -180,10 +181,20 @@ class Spring:
 
             self.Push(xx[ii],0,0,tempF,tempK,tempT)
 
+# Assign spring based on ID
+def Assign_Spr(ID:int)-> Spring:
+    if ID==1:
+        return Spr_Linear()
+    if ID==2:
+        return Spr_Bilinear()
 
-# Spring sub class Spr_Linear
+# Spring sub class Spr_Linear  ID=1
 class Spr_Linear(Spring):
     # linear spring has only 1 parameter k
+    def SetParameter(self, inputP):
+        self.parameter=inputP
+        self.CuK=self.parameter[0]  #set initial k as k
+        
     def init_tracker(self):
         self.tracker=0
         
@@ -193,7 +204,7 @@ class Spr_Linear(Spring):
     def Estimate_tracker(self,new_X):
         return 0
 
-# Spring sub class Spr_Bilinear
+# Spring sub class Spr_Bilinear   ID=2
 class Spr_Bilinear(Spring):
     # linear spring has only 3 parameter [k0 ky Dy]
     def init_tracker(self):
@@ -257,19 +268,140 @@ class Spr_Bilinear(Spring):
             else:                   # and going positive
                 return self.CuX+Dy
         
-# Spring sub class Spr_CUREE
+# Spring sub class Spr_CUREE   ID=3
 
-# Spring sub class Spr_EPHM
+# Spring sub class Spr_EPHM   ID=4
 
-# Spring sub class Spr_MultiLinear
+# Spring sub class Spr_MultiLinear    ID=5
 
-# Spring sub class Spr_CompOnly
+# Spring sub class Spr_CompOnly    ID=6
 
-# Spring sub class Spr_TensionOnly
+# Spring sub class Spr_TensionOnly   ID=7
 
-# Model super class Model
+# Model_file super class
+class Model_file:
+    def __init__(self) -> None:
+        pass        # create internal variables to store model info
+
+    def LoadFile(self,fileLoc):
+        pass        # load from file
+
+    def SaveFile(self,fileLoc):
+        pass        # save to a file
+
+class Model_file_SDOF(Model_file):
+    
+    def __init__(self) -> None:
+        self.mass=0
+        self.spr_type=0
+        self.spr_parameter=[]
+
+    def LoadFile(self, fileLoc):
+        with open(fileLoc,'r') as file:
+            lines=file.readlines()
+        
+        self.mass=float(lines[0].strip())
+        self.spr_type=float(lines[1].strip())
+        temp=lines[2].strip()
+        self.spr_parameter=[float(num) for num in temp.split()]
+
+    def SaveFile(self, fileLoc):
+        with open(fileLoc, 'w') as file:
+            # Write the first number (float) to the first line
+            file.write(f"{self.mass:.6f}\n")
+
+            # Write the second number (integer) to the second line
+            file.write(f"{int(self.spr_type)}\n")
+
+            # Write the array of numbers to the third line (space-separated)
+            array_str = " ".join(str(num) for num in self.spr_parameter)
+            file.write(array_str)
+
+
+# Model_Dyn super class Model
+class Model_Dyn:
+
+    def __init__(self) -> None:
+        pass        # create variable spaces
+
+    def Construct(self,Modelfile:Model_file):
+        pass        # construct variables based on model
+
+    def Initialize(self):
+        pass        # renew and make the model "new"
+
+    def Analysis_NB(self, EQ:Earthquake,ScaleFactor,DampR, timeStep, Pro_Bar):
+        pass        # earthquake analysis
+
+    def Analysis_Push(self,Pro:Protocols,DOF_ID,ScaleFactor):
+        pass        # let's try this, it is a SDOF displacement-control push
+
+    def DofPlot(self,DOF_ID,TargetCanvas):
+        pass        # plot any DOF over time
+
+    def HystPlot(self,Spr_ID,TargetCanvas):
+        pass        # plot any spring element's hystersis
+
 
 # Model sub class Model_SDOF
+class Model_Dyn_SDOF(Model_Dyn):
+    def __init__(self):
+        self.time=[]
+        self.Spr=Spring()  # we don't know what spring type here, do that in construct
+        self.mass=0
+        self.dampR=0
+        self.GlobalX=[]
+        self.GlobalV=[]
+        self.GlobalA=[]
+
+        self.CuX=0
+        self.CuV=0
+        self.CuA=0
+
+    def Construct(self, Modelfile: Model_file_SDOF):
+        self.mass=Modelfile.mass
+        self.Spr=Assign_Spr(Modelfile.spr_type)
+        self.Spr.SetParameter(Modelfile.spr_parameter)
+
+    def Initialize(self):
+        self.GlobalX=[]
+        self.GlobalV=[]
+        self.GlobalA=[]
+        self.time=[]
+        self.Spr.ClearMemory()
+
+        self.CuX=0
+        self.CuV=0
+        self.CuA=0
+
+    def Analysis_NB(self, EQ: Earthquake, ScaleFactor, DampR, timeStep, Pro_Bar):
+        # basic parameter
+        Beta=1/6
+        damping=2*math.sqrt(self.mass*self.Spr.CuK)*DampR
+        # remap ground motion into timestep
+        Tmax=max(EQ.t)
+        tt=np.arange(0,Tmax,timeStep)
+        Ft=self.mass*EQ.Ax
+        Ftt=np.interp(tt,EQ.t,Ft)
+
+        nn=len(tt)
+        for ii in range(len(tt)-1):
+            Df=Ftt[ii+1]-Ftt[ii]
+            Df_b=Df+self.CuV*(self.mass/timeStep/Beta+damping/2/Beta)+self.CuA*(self.mass/2/Beta-damping*timeStep*(1-1/4/Beta))
+            K_b=self.Spr.CuK+self.mass/Beta/timeStep/timeStep+damping/2/Beta/timeStep
+
+            D_x=Df_b/K_b
+            D_v=D_x/2/Beta/timeStep-self.CuV/2/Beta+self.CuA*timeStep*(1-1/4/Beta)
+
+            
+
+
+
+        
+        
+        
+        
+
 
 # Model sub class Model_ShearBld
 
