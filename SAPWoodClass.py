@@ -48,31 +48,33 @@ class Earthquake:
 # Displacement protocol class Disp
 class Protocols: 
     # All protocol obj has a maximum value of 1, so all need to be scaled before using
+    
 
-    def __init__(self,step_size):
-        self.value=np.arange(0,1,step_size) # by default this will be a monotonic protocol from 0 to 1 with given step size
+    def __init__(self):
+        self.step_size=0.01
+        self.value=np.arange(0,1,self.step_size) # by default this will be a monotonic protocol from 0 to 1 with given step size
         self.max=1
+        
+    def changeStepSize(self,newsize):
+        self.step_size=newsize
 
     def scale(self,targetMax):
         factor=targetMax/self.max
         self.value=np.multiply(self.value,factor)
         self.max=targetMax
 
-    def cyclic_linear(self,N_cycle,step_size): # Linear increasing amplitude with step size
+    def cyclic_linear(self,N_cycle): # Linear increasing amplitude with step size
         keypt=np.arange(0,1/N_cycle,1)
         ii=0
         s=-1
         e=1
         self.value=[]
         while ii<len(keypt):
-            temp=np.arange(s*keypt[ii],e*step_size,e*keypt[ii+1])
+            temp=np.arange(s*keypt[ii],self.step_size,e*keypt[ii+1])
             s=-s
             e=-e
             ii+=1
             self.value=np.append(self.value,temp)
-       
-
-
 
 # General loading class Load
 
@@ -178,8 +180,6 @@ class Spring:
 
             self.Push(xx[ii],0,0,tempF,tempK,tempT)
 
-    
-
 
 # Spring sub class Spr_Linear
 class Spr_Linear(Spring):
@@ -256,8 +256,6 @@ class Spr_Bilinear(Spring):
                 return X0
             else:                   # and going positive
                 return self.CuX+Dy
-
-
         
 # Spring sub class Spr_CUREE
 

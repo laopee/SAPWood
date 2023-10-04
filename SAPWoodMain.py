@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 #Global variables
 EQ_current=SP.Earthquake()
+Pro_current=SP.Protocols()
 
 
 
@@ -65,10 +66,12 @@ tabControl=ttk.Notebook(root)
 tab1=ttk.Frame(tabControl)
 tab2=ttk.Frame(tabControl)
 tab3=ttk.Frame(tabControl)
+tab4=ttk.Frame(tabControl)
 
 tabControl.add(tab1,text='Analysis')
 tabControl.add(tab2,text='Results')
 tabControl.add(tab3,text='Funny stuff')
+tabControl.add(tab4,text='Push spring')
 
 tabControl.pack(expand=1, fill="both")
 
@@ -91,5 +94,15 @@ button_save.pack()
 # tab 3
 button_game=tk.Button(tab3,text="Random ADV")
 button_game.pack()
+
+# tab 4
+button_push=tk.Button(tab4,text="push it")
+button_push.pack()
+
+text4 = tk.Text(tab4, font=("Purisa", 12),height=4,width=40)
+text4.pack()
+
+Figure_Hys = tk.Canvas(tab4, width=400, height=300)
+Figure_Hys.pack(fill=tk.X)
 
 root.mainloop()
