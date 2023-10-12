@@ -12,15 +12,16 @@ import matplotlib.pyplot as plt
 #Global variables
 EQ_current=SP.Earthquake()
 Pro_current=SP.Protocols()
-
+Model_current=SP.Model_Dyn()
+ModelFile_current=SP.Model_file()
 
 
 #Button functions
 def load_eq():
     filename=tk.filedialog.askopenfilename()
     EQ_current.LoadEQ(filename)
-    print(EQ_current.Ax[3])
-    print(EQ_current.Ay[5])
+    #print(EQ_current.Ax[3])
+    #print(EQ_current.Ay[5])
 
 def PlotAx():
     plot_xy_on_existing_canvas(Figure_Ax,EQ_current.t,EQ_current.Ax)
@@ -29,8 +30,17 @@ def PlotAy():
     plt.plot(EQ_current.t,EQ_current.Ay)
     plt.show()
 
+def load_Mfile():
+    filename=tk.filedialog.askopenfilename()
+    ModelFile_current.LoadFile(filename)
+    
+def display_ModelF(myText:tk.Text):
+    content=ModelFile_current.To_str()
+    myText.insert('1.0',content)
+
+
 #utility functions
-def plot_xy_on_existing_canvas(canvas, X, Y):
+def plot_xy_on_existing_canvas(canvas:tk.Canvas, X, Y):
     """
     Plots the X-Y data points as a line plot on an existing Tkinter canvas.
 
@@ -52,6 +62,9 @@ def plot_xy_on_existing_canvas(canvas, X, Y):
 
         # Draw a line segment connecting adjacent data points
         canvas.create_line(x1, y1, x2, y2, fill="blue")
+
+
+    
 
 
 
@@ -84,6 +97,12 @@ button_Px=tk.Button(tab1,text='plotX',command=PlotAx)
 button_Py=tk.Button(tab1,text='plotY',command=PlotAy)
 button_Px.pack()
 button_Py.pack()
+
+Tb1_text=tk.Text(tab1,text="show here")
+Tb1_text.pack()
+
+button_showModel=tk.Button(tab1,text="show model",command=display_ModelF(Tb1_text))
+button_showModel.pack()
 
 Figure_Ax = tk.Canvas(tab1, width=400, height=300)
 Figure_Ax.pack(fill=tk.X)

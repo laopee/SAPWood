@@ -2,6 +2,7 @@
 import numpy as np
 import os as os
 import math
+from tkinter import ttk
 
 
 # Earthquake class EQ
@@ -107,21 +108,11 @@ class Spring:
         self.PaF=0  # past spring values (last step)
 
         self.CurrentIndx=0  # where spring is currently
-
-    def SetParameter(self,inputP):
-        pass  # this will be different for each spring type
-
-    def init_tracker(self):
-        pass
-    
-    def Estimate_tracker(self,new_X): # this function will return tracker if the spring goes to new_X
-        # but it will NOT actually update or touch tracker, just hypothetically go to X
-        pass
-
+   
     def EstimateK(self,new_X):
         # this function will nudge the current spring with a new location X, and find the secant stiffness K to get there
         # dont touch anything, dont update any variables, just hypothetically go to X
-        new_F=self.GetForce(new_X)
+        new_F=self.GetNewForce(new_X)
         return (new_F-self.CuF)/(new_X-self.CuX)
 
     def Push(self, new_X,new_V,new_A,new_F,new_K,new_tracker):
@@ -132,12 +123,12 @@ class Spring:
         self.PaF=self.CuF
         self.PaK=self.CuK   #literally pushing spring one step forward
         
-        # calculate the New Current values
+        # put the New Current values in Spr status
         self.CuX=new_X
         self.CuF=new_F
         self.CuA=new_A
         self.CuV=new_V
-        self.CuK=new_K  #this functionwill find force
+        self.CuK=new_K  
         
         #update max-min
         self.Xmax=max(self.Xmax,self.CuX)
@@ -147,18 +138,17 @@ class Spring:
         self.tracker=new_tracker
 
         # store current values into the history
-        self.WriteCurrent()
-        self.CurrentIndx+=1
+        # self.WriteCurrent()  # we dont do this here because we want to have the option of NOT record spring history to save time and memory
+     
     
-    def GetForce(self,new_X):   #this is the difference in different Springs
-        pass                     # get force will NOT push the spring, it will just get force but no updates on variable        
-
+    
     def WriteCurrent(self):
         self.A=np.append(self.A,self.CuA)
         self.V=np.append(self.V,self.CuV)
         self.X=np.append(self.X,self.CuX)
         self.F=np.append(self.F,self.CuF)
         self.K=np.append(self.K,self.CuK)
+        self.CurrentIndx+=1  # you will know how many step you are at in recording
 
     def ClearMemory(self):
         self.X=[]
@@ -168,18 +158,35 @@ class Spring:
         self.K=[]    # empty out history, but dont initialize tracker and max
         self.CurrentIndx=0
     
-    def Protocal_Push(self,pro,scale):
+    def Protocal_Push(self,pro,scale):  #just do disp-control push of a spring
         
         self.__init__()
         self.init_tracker()
         
         xx=pro.value*scale   #pro is protocol object
         for ii in range(0,len(xx)):
-            tempF=self.GetForce(xx[ii])
+            tempF=self.GetNewForce(xx[ii])
             tempK=self.EstimateK(xx[ii])
             tempT=self.Estimate_tracker(xx[ii])
 
             self.Push(xx[ii],0,0,tempF,tempK,tempT)
+    
+    #following are functions passed to specific class
+
+    def SetParameter(self,inputP):
+        pass  # this will be different for each spring type
+
+    def init_tracker(self):
+        pass
+    
+    def Estimate_tracker(self,new_X): # this function will return tracker if the spring goes to new_X
+        # but it will NOT actually update or touch tracker, just hypothetically go to X
+        pass
+    def GetNewForce(self,new_X):   #this is the difference in different Springs
+        pass                    # get force will NOT push the spring, it will just get force but no updates on variable        
+    def GetK0(self):            #obtain initial K
+        pass
+
 
 # Assign spring based on ID
 def Assign_Spr(ID:int)-> Spring:
@@ -198,11 +205,14 @@ class Spr_Linear(Spring):
     def init_tracker(self):
         self.tracker=0
         
-    def GetForce(self,new_X):
+    def GetNewForce(self,new_X):
         return new_X*self.parameter[0]
     
     def Estimate_tracker(self,new_X):
         return 0
+    
+    def GetK0(self):
+        return self.parameter[0]
 
 # Spring sub class Spr_Bilinear   ID=2
 class Spr_Bilinear(Spring):
@@ -210,7 +220,7 @@ class Spr_Bilinear(Spring):
     def init_tracker(self):
         self.tracker=0      # tracker is X0, the balanced location
 
-    def GetForce(self,new_X):
+    def GetNewForce(self,new_X):
         K0=self.parameter[0]
         Ky=self.parameter[1]
         Dy=self.parameter[2]
@@ -268,6 +278,8 @@ class Spr_Bilinear(Spring):
             else:                   # and going positive
                 return self.CuX+Dy
         
+    def GetK0(self):
+        return self.parameter[0]
 # Spring sub class Spr_CUREE   ID=3
 
 # Spring sub class Spr_EPHM   ID=4
@@ -289,6 +301,9 @@ class Model_file:
     def SaveFile(self,fileLoc):
         pass        # save to a file
 
+    def To_str(self)-> str:
+        pass
+
 class Model_file_SDOF(Model_file):
     
     def __init__(self) -> None:
@@ -305,6 +320,11 @@ class Model_file_SDOF(Model_file):
         temp=lines[2].strip()
         self.spr_parameter=[float(num) for num in temp.split()]
 
+        #SDOF file format
+        #1 mass
+        #2 Sprtype 1-linear  2-bilinear
+        #3 SprParameters k0. Or  k0 ky Dy
+
     def SaveFile(self, fileLoc):
         with open(fileLoc, 'w') as file:
             # Write the first number (float) to the first line
@@ -316,7 +336,14 @@ class Model_file_SDOF(Model_file):
             # Write the array of numbers to the third line (space-separated)
             array_str = " ".join(str(num) for num in self.spr_parameter)
             file.write(array_str)
+            
+    def To_str(self) -> str:
+        tempstr=""
+        tempstr+=str(self.mass)+"\n"
+        tempstr+=str(self.spr_type)+"\n"
+        tempstr+="\t".join(str(f) for f in self.spr_parameter)
 
+        return tempstr
 
 # Model_Dyn super class Model
 class Model_Dyn:
@@ -330,7 +357,7 @@ class Model_Dyn:
     def Initialize(self):
         pass        # renew and make the model "new"
 
-    def Analysis_NB(self, EQ:Earthquake,ScaleFactor,DampR, timeStep, Pro_Bar):
+    def Analysis_NB(self, EQ:Earthquake,ScaleFactor,DampR, timeStep, Pro_Bar, WriteSpringOK):
         pass        # earthquake analysis
 
     def Analysis_Push(self,Pro:Protocols,DOF_ID,ScaleFactor):
@@ -353,6 +380,7 @@ class Model_Dyn_SDOF(Model_Dyn):
         self.GlobalX=[]
         self.GlobalV=[]
         self.GlobalA=[]
+        self.CurrentIndex=0
 
         self.CuX=0
         self.CuV=0
@@ -364,27 +392,34 @@ class Model_Dyn_SDOF(Model_Dyn):
         self.Spr.SetParameter(Modelfile.spr_parameter)
 
     def Initialize(self):
-        self.GlobalX=[]
-        self.GlobalV=[]
-        self.GlobalA=[]
-        self.time=[]
+        self.CurrentIndex=0
+        self.GlobalX=[0]
+        self.GlobalV=[0]
+        self.GlobalA=[0]
+        self.time=[0]
         self.Spr.ClearMemory()
 
         self.CuX=0
         self.CuV=0
         self.CuA=0
 
-    def Analysis_NB(self, EQ: Earthquake, ScaleFactor, DampR, timeStep, Pro_Bar):
+        self.PaX=0
+        self.PaV=0
+        self.PaA=0
+
+    def Analysis_NB(self, EQ: Earthquake, ScaleFactor, DampR, timeStep, Pro_Bar:ttk.Progressbar, WriteSpringOK):
         # basic parameter
         Beta=1/6
         damping=2*math.sqrt(self.mass*self.Spr.CuK)*DampR
         # remap ground motion into timestep
         Tmax=max(EQ.t)
         tt=np.arange(0,Tmax,timeStep)
-        Ft=self.mass*EQ.Ax
+        Ft=self.mass*EQ.Ax*ScaleFactor
         Ftt=np.interp(tt,EQ.t,Ft)
 
         nn=len(tt)
+        # set up progress bar
+        Pro_Bar["maximum"]=nn
         for ii in range(len(tt)-1):
             Df=Ftt[ii+1]-Ftt[ii]
             Df_b=Df+self.CuV*(self.mass/timeStep/Beta+damping/2/Beta)+self.CuA*(self.mass/2/Beta-damping*timeStep*(1-1/4/Beta))
@@ -393,14 +428,43 @@ class Model_Dyn_SDOF(Model_Dyn):
             D_x=Df_b/K_b
             D_v=D_x/2/Beta/timeStep-self.CuV/2/Beta+self.CuA*timeStep*(1-1/4/Beta)
 
+            #update model X and V
+            self.PaX=self.CuX
+            self.PaV=self.CuV
+            self.CuX=self.PaX+D_x
+            self.CuV=self.PaV+D_v
+
+
+            #for all springs in the model calculate new properties
+            # potentially you can implement sub-step here
+            temp_newTrack=self.Spr.Estimate_tracker(self.CuX)   #get new tracker
+            temp_newF=self.Spr.GetNewForce(self.CuX)  #get new spring force
+            temp_newK=self.Spr.EstimateK(self.CuX)      #get new spring K
             
+            #with spring new forces, update model A
+            self.PaA=self.CuA
+            self.CuA=(Ftt[ii+1]-damping*self.CuV-temp_newF)/self.mass
+
+            #update Springs
+            self.Spr.Push(self.CuX,self.CuV,self.CuA,temp_newF,temp_newK,temp_newTrack)
+            if WriteSpringOK:  #write Spring data if desired
+                self.Spr.WriteCurrent()
+            
+            #write in model vectors
+            self.GlobalX=np.append(self.GlobalX,self.CuX)
+            self.GlobalV=np.append(self.GlobalV,self.CuV)
+            self.GlobalA=np.append(self.GlobalA,self.CuA)
+            self.time=np.append(self.time,tt[ii+1])
+
+            #progress bar
+            Pro_Bar["value"]=ii
+            Pro_Bar.update()
+            #might need to get root or pbar to update
 
 
 
-        
-        
-        
-        
+
+     
 
 
 # Model sub class Model_ShearBld
