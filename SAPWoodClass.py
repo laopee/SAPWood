@@ -85,6 +85,7 @@ class Spring:
     def __init__(self):
         self.parameter=[] # spring parameters
         self.tracker=[]  # special tracker info for nonlinear springs
+        self.type=0
         
         self.X=[]
         self.V=[]
@@ -205,6 +206,7 @@ class Spr_Linear(Spring):
     def SetParameter(self, inputP):
         self.parameter=inputP
         self.CuK=self.parameter[0]  #set initial k as k
+        self.type=1
         
     def init_tracker(self):
         self.tracker=0
@@ -225,6 +227,7 @@ class Spr_Bilinear(Spring):
         self.parameter=inputP
         self.CuK=self.parameter[0]  #set initial k as k0
         self.tracker=0
+        self.type=2
 
     def init_tracker(self):
         self.tracker=0      # tracker is X0, the balanced location
@@ -295,10 +298,76 @@ class Spr_Bilinear(Spring):
 # Spring sub class Spr_EPHM   ID=4
 
 # Spring sub class Spr_MultiLinear    ID=5
+class Spr_Multilinear(Spring):
+    # Multilinear spring has N parameters
+    # N_segment D1 F1 D2 F2 D3 F3....DN FN  (K beyond DN will be extrapolated)
+    def SetParameter(self, inputP):
+        self.type=5
+        self.parameter=inputP
+        self.CuK=self.parameter[1]/self.parameter[0]  #set initial k as k0
+        
+    def init_tracker(self):  # there is no need to track
+        self.tracker=0
+        
+    def GetNewForce(self,new_X):
+        temp=self.parameter[1:]
+        X=temp[1::2]
+        F=temp[::2]
+        temp=np.interp(abs(new_X),X,F)
+        return temp*np.sign(new_X)
+    
+    def Estimate_tracker(self,new_X):
+        return 0
+    
+    def GetK0(self):
+        return self.parameter[0]
 
 # Spring sub class Spr_CompOnly    ID=6
-
+class Spr_CompOnly(Spring):
+    # Comp only spring has 1 parameters
+    # k0  (K beyond DN will be extrapolated)
+    def SetParameter(self, inputP):
+        self.type=6
+        self.parameter=inputP
+        self.CuK=self.parameter[0]/100000  #set initial k as k0/100000
+        
+    def init_tracker(self):  # there is no need to track
+        self.tracker=0
+        
+    def GetNewForce(self,new_X):
+        if new_X>0:
+            return new_X*self.parameter[0]/100000
+        else:
+            return new_X*self.parameter[0]
+    
+    def Estimate_tracker(self,new_X):
+        return 0
+    
+    def GetK0(self):
+        return self.parameter[0]/100000
 # Spring sub class Spr_TensionOnly   ID=7
+class Spr_TensionOnly(Spring):
+    # Tension only spring has 1 parameters
+    # k0  (K beyond DN will be extrapolated)
+    def SetParameter(self, inputP):
+        self.type=7
+        self.parameter=inputP
+        self.CuK=self.parameter[0]  #set initial k as k0
+        
+    def init_tracker(self):  # there is no need to track
+        self.tracker=0
+        
+    def GetNewForce(self,new_X):
+        if new_X>0:
+            return new_X*self.parameter[0]
+        else:
+            return new_X*self.parameter[0]/100000
+    
+    def Estimate_tracker(self,new_X):
+        return 0
+    
+    def GetK0(self):
+        return self.parameter[0]
 
 # Model_file super class
 class Model_file:
