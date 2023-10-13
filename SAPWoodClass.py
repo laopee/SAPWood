@@ -113,7 +113,11 @@ class Spring:
         # this function will nudge the current spring with a new location X, and find the secant stiffness K to get there
         # dont touch anything, dont update any variables, just hypothetically go to X
         new_F=self.GetNewForce(new_X)
-        return (new_F-self.CuF)/(new_X-self.CuX)
+        if abs(new_X-self.CuX)<1e-10:
+            print("divide by 0")
+            return self.CuK
+        else:
+            return (new_F-self.CuF)/(new_X-self.CuX)
 
     def Push(self, new_X,new_V,new_A,new_F,new_K,new_tracker):
         
@@ -217,6 +221,11 @@ class Spr_Linear(Spring):
 # Spring sub class Spr_Bilinear   ID=2
 class Spr_Bilinear(Spring):
     # linear spring has only 3 parameter [k0 ky Dy]
+    def SetParameter(self, inputP):
+        self.parameter=inputP
+        self.CuK=self.parameter[0]  #set initial k as k0
+        self.tracker=0
+
     def init_tracker(self):
         self.tracker=0      # tracker is X0, the balanced location
 
@@ -257,6 +266,7 @@ class Spr_Bilinear(Spring):
                     return self.CuF+K0*2*Dy+Ky*(new_X-self.CuX-2*Dy)
     
     def Estimate_tracker(self, new_X):
+        
         K0=self.parameter[0]
         Ky=self.parameter[1]
         Dy=self.parameter[2]
@@ -270,7 +280,7 @@ class Spr_Bilinear(Spring):
                 return X0
             else:                   # and going negative
                 # could update tracker here
-                return self.Cux-Dy
+                return self.CuX-Dy
         
         if self.CuX-X0<-Dy:   # if we are in negative yielding region
             if new_X-self.CuX<0:   # and going more negative
@@ -369,10 +379,10 @@ class Model_Dyn:
     def Analysis_Push(self,Pro:Protocols,DOF_ID,ScaleFactor):
         pass        # let's try this, it is a SDOF displacement-control push
 
-    def DofPlot(self,DOF_ID,TargetCanvas):
+    def DofPlot(self,DOF_ID,canvas):
         pass        # plot any DOF over time
 
-    def HystPlot(self,Spr_ID,TargetCanvas):
+    def HystPlot(self,Spr_ID,canvas):
         pass        # plot any spring element's hystersis
 
 
@@ -444,6 +454,8 @@ class Model_Dyn_SDOF(Model_Dyn):
 
             #for all springs in the model calculate new properties
             # potentially you can implement sub-step here
+            
+            # turn model level X into spring level x
             temp_newTrack=self.Spr.Estimate_tracker(self.CuX)   #get new tracker
             temp_newF=self.Spr.GetNewForce(self.CuX)  #get new spring force
             temp_newK=self.Spr.EstimateK(self.CuX)      #get new spring K
@@ -468,9 +480,49 @@ class Model_Dyn_SDOF(Model_Dyn):
             Pro_Bar.update()
             #might need to get root or pbar to update
 
+    def DofPlot(self, DOF_ID, canvas):
+        
+        X=self.time
+        Y=self.GlobalX
 
+        print(len(X))
+        print(len(Y))
 
+        # Scale the data points to fit within the canvas
+        x_min, x_max = min(X), max(X)
+        y_min, y_max = min(Y), max(Y)
 
+        for i in range(len(X) - 1):
+            # Map X and Y to canvas coordinates for each pair of adjacent points
+            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+
+            # Draw a line segment connecting adjacent data points
+            canvas.create_line(x1, y1, x2, y2, fill="blue")
+
+    def HystPlot(self, Spr_ID, canvas):
+        
+        X=self.Spr.X
+        Y=self.Spr.F
+
+        print(len(X))
+        print(len(Y))
+
+        # Scale the data points to fit within the canvas
+        x_min, x_max = min(X), max(X)
+        y_min, y_max = min(Y), max(Y)
+
+        for i in range(len(X) - 1):
+            # Map X and Y to canvas coordinates for each pair of adjacent points
+            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+
+            # Draw a line segment connecting adjacent data points
+            canvas.create_line(x1, y1, x2, y2, fill="blue")
      
 
 

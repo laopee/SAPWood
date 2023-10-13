@@ -71,7 +71,22 @@ def show_Mfile():
     display_msg_on_existing_text(Tb1_text,msg)
 
 def Ansys_NB():
-    pass
+    global Model_current, EQ_current
+
+    Model_current.Analysis_NB(EQ_current,300,0.05,0.01,progress_bar,True)
+
+def Plot_X():
+    global Model_current
+
+    Model_current.DofPlot(1,Figure_Ax)  
+    print('I plotted X')  
+
+def Plot_hys():
+    global Model_current
+
+    Model_current.HystPlot(1,Figure_Hys)
+    print('now Hyst plot')
+    print(max(Model_current.GlobalX))
 
 #utility functions
 def plot_xy_on_existing_canvas(canvas:tk.Canvas, X, Y):
@@ -155,6 +170,12 @@ progress_bar.pack()
 button_anlysis=tk.Button(tab1,text="Anlysis", command=Ansys_NB)
 button_anlysis.pack()
 
+button_response=tk.Button(tab1,text="X-result",command=Plot_X)
+button_response.pack()
+
+button_hyst=tk.Button(tab1,text='plot hys', command=Plot_hys)
+button_hyst.pack()
+
 # tab 2
 button_save=tk.Button(tab2,text="Save")
 button_save.pack()
@@ -163,7 +184,7 @@ button_game=tk.Button(tab3,text="Random ADV")
 button_game.pack()
 
 # tab 4
-button_push=tk.Button(tab4,text="push it")
+button_push=tk.Button(tab4,text="push it",command=Plot_hys)
 button_push.pack()
 
 text4 = tk.Text(tab4, font=("Purisa", 12),height=4,width=40)
