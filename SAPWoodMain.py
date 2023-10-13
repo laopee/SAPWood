@@ -5,15 +5,28 @@
 # GUIs to control analysis and display results
 import SAPWoodClass as SP
 
+
 import tkinter as tk
 from tkinter import ttk
 import matplotlib.pyplot as plt
+
 
 #Global variables
 EQ_current=SP.Earthquake()
 Pro_current=SP.Protocols()
 Model_current=SP.Model_Dyn()
 ModelFile_current=SP.Model_file()
+
+#Global functions
+
+
+
+# Assign model based on type from model file  #I would like to get these in with SAPWood Class, but I have trouble import functions from that
+def Assign_Model(type:int):
+    if type==1:
+        return SP.Model_Dyn_SDOF()
+    if type==2:
+        return SP.Model_Dyn()    
 
 
 #Button functions
@@ -31,13 +44,34 @@ def PlotAy():
     plt.show()
 
 def load_Mfile():
-    filename=tk.filedialog.askopenfilename()
-    ModelFile_current.LoadFile(filename)
-    
-def display_ModelF(myText:tk.Text):
-    content=ModelFile_current.To_str()
-    myText.insert('1.0',content)
+    global ModelFile_current
+    global Model_current
 
+    filename=tk.filedialog.askopenfilename()
+    with open(filename,'r') as file:
+            lines=file.readlines()
+    # determine what model file type it is
+    mytype=int(lines[0].strip())
+    if mytype==1:
+        ModelFile_current=SP.Model_file_SDOF()
+    if mytype==2:
+        ModelFile_current=SP.Model_file()
+
+
+    ModelFile_current.LoadFile(lines)
+    print('file loaded'+str(ModelFile_current.type))
+    print(ModelFile_current.To_str())
+    Model_current=Assign_Model(ModelFile_current.type) # this supposed to assign model type by input file
+
+    Model_current.Construct(ModelFile_current)
+
+def show_Mfile():
+    msg=ModelFile_current.To_str()
+    
+    display_msg_on_existing_text(Tb1_text,msg)
+
+def Ansys_NB():
+    pass
 
 #utility functions
 def plot_xy_on_existing_canvas(canvas:tk.Canvas, X, Y):
@@ -63,10 +97,10 @@ def plot_xy_on_existing_canvas(canvas:tk.Canvas, X, Y):
         # Draw a line segment connecting adjacent data points
         canvas.create_line(x1, y1, x2, y2, fill="blue")
 
-
+def display_msg_on_existing_text(mytext:tk.Text,msg:str):
+    mytext.delete('1.0','end')
+    mytext.insert('1.0',msg)
     
-
-
 
 #All functions defined above, now do the GUIs
 
@@ -98,14 +132,28 @@ button_Py=tk.Button(tab1,text='plotY',command=PlotAy)
 button_Px.pack()
 button_Py.pack()
 
-Tb1_text=tk.Text(tab1,text="show here")
+button_loadM=tk.Button(tab1,text="load Model",command=load_Mfile)
+button_loadM.pack()
+
+Tb1_text=tk.Text(tab1,height=8)
 Tb1_text.pack()
 
-button_showModel=tk.Button(tab1,text="show model",command=display_ModelF(Tb1_text))
+button_showModel=tk.Button(tab1,text="show model",command=show_Mfile)
 button_showModel.pack()
 
-Figure_Ax = tk.Canvas(tab1, width=400, height=300)
+Figure_Ax = tk.Canvas(tab1, width=200, height=100)
 Figure_Ax.pack(fill=tk.X)
+
+# analysis gadgets
+values = ['0.05', '0.02', '0.01']
+drop_down = ttk.Combobox(tab1, values=values)
+drop_down.pack()
+
+progress_bar = ttk.Progressbar(tab1, orient='horizontal', length=200, mode='determinate')
+progress_bar.pack()
+
+button_anlysis=tk.Button(tab1,text="Anlysis", command=Ansys_NB)
+button_anlysis.pack()
 
 # tab 2
 button_save=tk.Button(tab2,text="Save")

@@ -187,13 +187,13 @@ class Spring:
     def GetK0(self):            #obtain initial K
         pass
 
-
-# Assign spring based on ID
-def Assign_Spr(ID:int)-> Spring:
+# Assign spring based on ID   
+def Assign_Spr(ID:int):
     if ID==1:
         return Spr_Linear()
     if ID==2:
         return Spr_Bilinear()
+
 
 # Spring sub class Spr_Linear  ID=1
 class Spr_Linear(Spring):
@@ -292,10 +292,11 @@ class Spr_Bilinear(Spring):
 
 # Model_file super class
 class Model_file:
-    def __init__(self) -> None:
+    def __init__(self):
+        self.type=-1        # by default model type=-1
         pass        # create internal variables to store model info
 
-    def LoadFile(self,fileLoc):
+    def LoadFile(self,lines):
         pass        # load from file
 
     def SaveFile(self,fileLoc):
@@ -304,26 +305,30 @@ class Model_file:
     def To_str(self)-> str:
         pass
 
+
+
 class Model_file_SDOF(Model_file):
     
     def __init__(self) -> None:
+        self.type=1  # file type is 1 now
         self.mass=0
         self.spr_type=0
         self.spr_parameter=[]
 
-    def LoadFile(self, fileLoc):
-        with open(fileLoc,'r') as file:
-            lines=file.readlines()
+    def LoadFile(self, lines):
         
-        self.mass=float(lines[0].strip())
-        self.spr_type=float(lines[1].strip())
-        temp=lines[2].strip()
+        
+        self.type=int(lines[0].strip())
+        self.mass=float(lines[1].strip())
+        self.spr_type=float(lines[2].strip())
+        temp=lines[3].strip()
         self.spr_parameter=[float(num) for num in temp.split()]
 
         #SDOF file format
-        #1 mass
-        #2 Sprtype 1-linear  2-bilinear
-        #3 SprParameters k0. Or  k0 ky Dy
+        #1 1 (indicating model type)
+        #2 mass
+        #3 Sprtype 1-linear  2-bilinear
+        #4 SprParameters k0. Or  k0 ky Dy
 
     def SaveFile(self, fileLoc):
         with open(fileLoc, 'w') as file:
@@ -339,16 +344,17 @@ class Model_file_SDOF(Model_file):
             
     def To_str(self) -> str:
         tempstr=""
+        tempstr+=str(self.type)+"\n"
         tempstr+=str(self.mass)+"\n"
         tempstr+=str(self.spr_type)+"\n"
         tempstr+="\t".join(str(f) for f in self.spr_parameter)
-
         return tempstr
 
 # Model_Dyn super class Model
 class Model_Dyn:
 
-    def __init__(self) -> None:
+    def __init__(self):
+        self.type=-1
         pass        # create variable spaces
 
     def Construct(self,Modelfile:Model_file):
@@ -373,6 +379,7 @@ class Model_Dyn:
 # Model sub class Model_SDOF
 class Model_Dyn_SDOF(Model_Dyn):
     def __init__(self):
+        self.type=1
         self.time=[]
         self.Spr=Spring()  # we don't know what spring type here, do that in construct
         self.mass=0
