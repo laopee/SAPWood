@@ -144,9 +144,7 @@ class Spring:
 
         # store current values into the history
         # self.WriteCurrent()  # we dont do this here because we want to have the option of NOT record spring history to save time and memory
-     
-    
-    
+         
     def WriteCurrent(self):
         self.A=np.append(self.A,self.CuA)
         self.V=np.append(self.V,self.CuV)
@@ -199,6 +197,14 @@ def Assign_Spr(ID:int):
     if ID==2:
         return Spr_Bilinear()
 
+def Line_interXY(k1,x1,y1,k2,x2,y2):
+    if abs(k1-k2)<1e-10:
+        print('parallel line dont intersect')
+        return x1,y1
+    else:
+        x=((k1 * x1 - k2 * x2) - (y1 - y2)) / (k1 - k2)
+        y=k1*(x-x1)+y1
+        return x,y
 
 # Spring sub class Spr_Linear  ID=1
 class Spr_Linear(Spring):
@@ -294,7 +300,107 @@ class Spr_Bilinear(Spring):
     def GetK0(self):
         return self.parameter[0]
 # Spring sub class Spr_CUREE   ID=3
+class Spr_CUREE(Spring):
+    # CUREE model has 10 parameters
+    # k0, xu, F0, F1, r1, r2, r3, r4, alpha, beta
+    def SetParameter(self, inputP):
+        self.parameter=inputP
+        self.CuK=self.parameter[0]  #set initial k as k0
+        self.tracker=0
+        self.type=3
+        self.k0=self.parameter[0]  #hard to keep writing parameter, let's do names
+        self.xu=self.parameter[1]
+        self.F0=self.parameter[2]
+        self.F1=self.parameter[3]
+        self.r1=self.parameter[4]
+        self.r2=self.parameter[5]
+        self.r3=self.parameter[6]
+        self.r4=self.parameter[7]
+        self.alpha=self.parameter[8]
+        self.beta=self.parameter[9]
 
+        self.tracker=[0, 0, 0, 0, 1, 0]
+        # tracker shouldbe maxX unloadX_positive minX unloadX_negative Onbackbone=0 or 1 OnR3=0 or 1
+        # OnR3 will be 1 ONLY when you JUST unload from backbone
+        
+    def init_tracker(self):
+        self.tracker=[0, 0, 0, 0, 1, 0]
+        # tracker shouldbe maxX unloadX_positive minX unloadX_negative  Onbackbone=0 or 1 OnR3=0 or 1
+
+    def __Backbone(self,xx):
+        # this is a subroutine of hysteresis model
+        # find the F on the envelope curve given xx
+        # xx can be + or -
+        temp=0
+        if xx <= self.xu:
+            temp=(self.F0 + self.k0 * self.r1 * xx) * (1 - math.exp(-self.k0 * xx / self.F0))
+        Fu = (self.F0 + self.k0 * self.r1 * self.xu) * (1 - math.exp(-self.k0 * self.xu / self.F0))
+        x_end=self.xu+Fu/self.k0/self.r2
+
+        if xx > self.xu and xx<x_end:
+            temp=Fu + (xx - self.xu) * self.k0 * self.r2
+        
+        if xx>=x_end:
+            temp=0
+        
+        return math.sign(xx)*temp
+    
+    def GetNewForce(self, new_X):
+        return super().GetNewForce(new_X)
+    
+    def Estimate_tracker(self, new_X):
+        Xmax=self.tracker[0]
+        UnloadX_P=self.tracker[1]
+        Xmin=self.tracker[2]
+        UnloadX_N=self.tracker[3]
+        on_backbone=self.tracker[4]
+        on_R3=self.tracker[5]
+
+        
+        
+        if on_backbone>0.5 and self.CuX>0:  # unloading from positive backbone, get on R3
+            if new_X<self.CuX:
+                UnloadX_P=self.CuX
+                on_backbone=0
+                on_R3=1
+        
+        if on_backbone>0.5 and self.CuX<0:  # unloading from negative backbone, get on R3
+            if new_X>self.CuX:
+                UnloadX_N=self.CuX
+                on_backbone=0
+                on_R3=1
+        
+        if on_backbone<0.5 and on_R3<0.5:  # not on R3 NOR backbone
+            if new_X>Xmax*self.beta or new_X<Xmin*self.beta:  # coming on to backbone with overprojection by Beta
+                on_backbone=1
+                    
+        if on_backbone<0.5 and on_R3>0.5:  # on R3 , get out of R3 by going to backbone
+            if new_X>Xmax or new_X<Xmin:  # coming on to backbone 
+                on_backbone=1
+                on_R3=0
+
+        if on_R3>0.5:  #on R3, get out of R3 by going back to R4
+            # calculate limits of unloading R3
+            UnloadF_P=self.__Backbone(UnloadX_P)
+            UnloadF_N=self.__Backbone(UnloadX_N)
+            XY_P=Line_interXY(self.k0*self.r4,0,-self.F1,self.k0*self.r3,UnloadX_P,UnloadF_P)
+            XY_N=Line_interXY(self.k0*self.r4,0,self.F1,self.k0*self.r3,UnloadX_N,UnloadF_N)
+
+            if self.CuX>XY_P[0] and new_X<XY_P[0]:
+                on_R3=0
+            if self.Cux<XY_N[0] and new_X>XY_N[0]:
+                on_R3=0
+
+        if new_X>Xmax:
+            Xmax=new_X
+        if new_X<Xmin:
+            Xmin=new_X      # Note, we are not updating tracker, only return the tracker IF we move to new_X
+
+
+        return [Xmax, UnloadX_P, Xmin, UnloadX_N, on_backbone, on_R3]
+    
+    def GetK0(self):
+        return self.k0
 # Spring sub class Spr_EPHM   ID=4
 
 # Spring sub class Spr_MultiLinear    ID=5
