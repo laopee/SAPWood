@@ -16,6 +16,7 @@ EQ_current=SP.Earthquake()
 Pro_current=SP.Protocols()
 Model_current=SP.Model_Dyn()
 ModelFile_current=SP.Model_file()
+Spr_current=SP.Spring()
 
 #Global functions
 
@@ -27,7 +28,7 @@ def Assign_Model(type:int):
         return SP.Model_Dyn_SDOF()
     if type==2:
         return SP.Model_Dyn()    
-
+#________________above functions are not ideal, may improve later
 
 #Button functions
 def load_eq():
@@ -87,6 +88,12 @@ def Plot_hys():
     Model_current.HystPlot(1,Figure_Hys)
     print('now Hyst plot')
     print(max(Model_current.GlobalX))
+
+def Spring_Push():
+    global Spr_current, Pro_current
+    # 
+
+#__________end of button functions
 
 #utility functions
 def plot_xy_on_existing_canvas(canvas:tk.Canvas, X, Y):

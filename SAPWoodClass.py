@@ -1,7 +1,7 @@
 # This code file contains major classes in SAPWood analysis
 import numpy as np
 import os as os
-import math
+import math as math
 from tkinter import ttk
 
 
@@ -190,12 +190,35 @@ class Spring:
     def GetK0(self):            #obtain initial K
         pass
 
+    def HysPlot(self,canvas):
+        X=self.X
+        Y=self.F
+
+        print(len(X))
+        print(len(Y))
+
+        # Scale the data points to fit within the canvas
+        x_min, x_max = min(X), max(X)
+        y_min, y_max = min(Y), max(Y)
+
+        for i in range(len(X) - 1):
+            # Map X and Y to canvas coordinates for each pair of adjacent points
+            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+
+            # Draw a line segment connecting adjacent data points
+            canvas.create_line(x1, y1, x2, y2, fill="blue")
+
 # Assign spring based on ID   
 def Assign_Spr(ID:int):
     if ID==1:
         return Spr_Linear()
     if ID==2:
         return Spr_Bilinear()
+    if ID==3:
+        return Spr_CUREE()
 
 def Line_interXY(k1,x1,y1,k2,x2,y2):
     if abs(k1-k2)<1e-10:
@@ -331,9 +354,11 @@ class Spr_CUREE(Spring):
         # this is a subroutine of hysteresis model
         # find the F on the envelope curve given xx
         # xx can be + or -
-        temp=0
+        temp=0.1
         if xx <= self.xu:
+            #print(-self.k0 * xx / self.F0)
             temp=(self.F0 + self.k0 * self.r1 * xx) * (1 - math.exp(-self.k0 * xx / self.F0))
+
         Fu = (self.F0 + self.k0 * self.r1 * self.xu) * (1 - math.exp(-self.k0 * self.xu / self.F0))
         x_end=self.xu+Fu/self.k0/self.r2
 
@@ -341,9 +366,9 @@ class Spr_CUREE(Spring):
             temp=Fu + (xx - self.xu) * self.k0 * self.r2
         
         if xx>=x_end:
-            temp=0
+            temp=0.1
         
-        return math.sign(xx)*temp
+        return np.sign(xx)*temp
     
     def __Backbone_unload_P(self,xx):
         # this subroutine will find F on unloading path given xx
@@ -364,7 +389,11 @@ class Spr_CUREE(Spring):
         # calculated the target point on the backbone
         tar_X=self.beta*self.tracker[3]
         tar_F=self.__Backbone(tar_X)
-        kp=self.k0*(self.F0/self.k0/abs(tar_X))^self.alpha
+        #print(tar_X)
+        if abs(tar_X)>=1e-8:            
+            kp=self.k0*(self.F0/self.k0/abs(tar_X))**self.alpha
+        else:
+            kp=self.k0**self.alpha
         # find the intersection of the r4 and kp line
         inX,inY=Line_interXY(kp,tar_X,tar_F,self.k0*self.r4,0,-self.F1)
 
@@ -378,7 +407,11 @@ class Spr_CUREE(Spring):
         # calculated the target point on the backbone
         tar_X=self.beta*self.tracker[1]
         tar_F=self.__Backbone(tar_X)
-        kp=self.k0*(self.F0/self.k0/tar_X)^self.alpha
+        if abs(tar_X)>=1e-8:            
+            kp=self.k0*(self.F0/self.k0/abs(tar_X))**self.alpha
+        else:
+            kp=self.k0**self.alpha
+        #kp=self.k0*(self.F0/self.k0/tar_X)**self.alpha
         # find the intersection of the r4 and kp line
         inX,inY=Line_interXY(kp,tar_X,tar_F,self.k0*self.r4,0,self.F1)
 
@@ -392,9 +425,6 @@ class Spr_CUREE(Spring):
 
         return self.tracker[5]+self.r3*self.k0*(xx-self.tracker[4])
     
-    def __findr3Limit(self):
-        # get current unload x and f 
-        return 0,0
 
     def GetNewForce(self, new_X):
         maxX=self.tracker[0]
@@ -406,25 +436,29 @@ class Spr_CUREE(Spring):
         PathID=self.tracker[6]      #current location
         DX=new_X-self.CuX
 
+        Res=0
+
+        print('Path=',PathID)
+
         # on positive back bone  0
         if PathID==0 and DX>=0:
             maxX=new_X
-            return self.__Backbone(new_X)
+            Res=self.__Backbone(new_X)
         
         if PathID==0 and DX<0:
             unloadX_P=self.CuX
-            PathID=4
-            return self.__Backbone_unload_P(new_X)
+            New_PathID=4
+            Res=self.__Backbone_unload_P(new_X)
         
         # on negative back bone   1
         if PathID==1 and DX<=0:
             minX=new_X
-            return self.__Backbone(new_X)
+            Res=self.__Backbone(new_X)
         
         if PathID==1 and DX>0:
             unloadX_N=self.CuX
-            PathID=4
-            return self.__Backbone_unload_N(new_X)
+            New_PathID=4
+            Res=self.__Backbone_unload_N(new_X)
         
         # on unloading path from backbone 4
         if PathID==4:
@@ -434,13 +468,13 @@ class Spr_CUREE(Spring):
 
                 if new_X>unloadX_P:
                     maxX=new_X
-                    PathID=0
-                    return self.__Backbone(new_X)
+                    New_PathID=0
+                    Res=self.__Backbone(new_X)
                 if new_X<unloadX_P and new_X>inX:
-                    return self.__Backbone_unload_P(new_X)
+                    Res=self.__Backbone_unload_P(new_X)
                 if new_X<inX:
-                    PathID=3
-                    return self.__Pinch_lower(new_X)
+                    New_PathID=3
+                    Res=self.__Pinch_lower(new_X)
             
             if self.CuX<0:
                 # find intesection of unloading from negative to pinching line
@@ -448,13 +482,13 @@ class Spr_CUREE(Spring):
                 
                 if new_X<unloadX_N:
                     minX=new_X
-                    PathID=1
-                    return self.__Backbone(new_X)
+                    New_PathID=1
+                    Res=self.__Backbone(new_X)
                 if new_X>unloadX_N and new_X<inX:
-                    return self.__Backbone_unload_N(new_X)
+                    Res=self.__Backbone_unload_N(new_X)
                 if new_X>inX:
-                    PathID=2
-                    return self.__Pinch_upper(new_X)
+                    New_PathID=2
+                    Res=self.__Pinch_upper(new_X)
 
         # on upper r4 path 2
         if PathID==2:
@@ -462,15 +496,15 @@ class Spr_CUREE(Spring):
             
             if DX>0 and new_X>tar_X:
                 maxX=new_X
-                PathID=0
-                return self.__Backbone(new_X)
+                New_PathID=0
+                Res=self.__Backbone(new_X)
             if DX>0 and new_X<tar_X:
-                return self.__Pinch_upper(new_X)
+                Res=self.__Pinch_upper(new_X)
             if DX<0:
-                PathID=5
+                New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                return self.__General_unload(new_X)
+                Res=self.__General_unload(new_X)
             
         # on lower r4 path 3
         if PathID==3:
@@ -478,87 +512,159 @@ class Spr_CUREE(Spring):
             
             if DX<0 and new_X<tar_X:
                 minX=new_X
-                PathID=1
-                return self.__Backbone(new_X)
+                New_PathID=1
+                Res=self.__Backbone(new_X)
             if DX<0 and new_X>tar_X:
-                return self.__Pinch_lower(new_X)
+                Res=self.__Pinch_lower(new_X)
             if DX>0:
-                PathID=5
+                New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                return self.__General_unload(new_X)
+                Res=self.__General_unload(new_X)
 
         # on general unloading path 5
         if PathID==5:
-            UperX,LowX=self.__findr3Limit()
-            if new_X<LowX:
-                PathID=3
-                return self.__Pinch_lower(new_X)
-            if new_X>LowX and new_X<UperX:
-                return self.__General_unload(new_X)
-            if new_X>UperX:
-                PathID=2
-                return self.__Pinch_upper(new_X)
+            # calculate forces from path 2, 3, 5
+            F_p2=self.__Pinch_upper(new_X)
+            F_p3=self.__Pinch_lower(new_X)
+            F_p5=self.CuF+(new_X-self.CuX)*self.k0*self.r3
+            if F_p5<=F_p2 and F_p5>=F_p3:
+                Res=F_p5
+            if F_p5>F_p2:
+                New_PathID=2
+                Res=F_p2
+            if F_p5<F_p3:
+                New_PathID=3
+                Res=F_p3
+        
+        # make sure there is no overshooting
+        temp=self.__Backbone(new_X)
+        if new_X>self.xu and Res>temp:
+            Res=temp
+        if new_X<-self.xu and Res<temp:
+            Res=temp
 
-                
-
-                  
-
-
-
-
-
+        return Res
+ 
     
     def Estimate_tracker(self, new_X):
-        Xmax=self.tracker[0]
-        UnloadX_P=self.tracker[1]
-        Xmin=self.tracker[2]
-        UnloadX_N=self.tracker[3]
-        on_backbone=self.tracker[4]
-        on_R3=self.tracker[5]
+        maxX=self.tracker[0]
+        unloadX_P=self.tracker[1]   #unloading form P backbone
+        minX=self.tracker[2]
+        unloadX_N=self.tracker[3]   #unloading from N backbone
+        unloadX=self.tracker[4]     #normal unloading X
+        unloadF=self.tracker[5]     #normal unloading F
+        PathID=self.tracker[6]      #current location
+        DX=new_X-self.CuX
 
+        Res=0
+        New_PathID=PathID  #if nothing trigers, then stay on current path
+
+        # on positive back bone  0
+        if PathID==0 and DX>=0:
+            maxX=new_X
+            Res=self.__Backbone(new_X)
         
+        if PathID==0 and DX<0:
+            unloadX_P=self.CuX
+            New_PathID=4
+            Res=self.__Backbone_unload_P(new_X)
         
-        if on_backbone>0.5 and self.CuX>0:  # unloading from positive backbone, get on R3
-            if new_X<self.CuX:
-                UnloadX_P=self.CuX
-                on_backbone=0
-                on_R3=1
+        # on negative back bone   1
+        if PathID==1 and DX<=0:
+            minX=new_X
+            Res=self.__Backbone(new_X)
         
-        if on_backbone>0.5 and self.CuX<0:  # unloading from negative backbone, get on R3
-            if new_X>self.CuX:
-                UnloadX_N=self.CuX
-                on_backbone=0
-                on_R3=1
+        if PathID==1 and DX>0:
+            unloadX_N=self.CuX
+            New_PathID=4
+            Res=self.__Backbone_unload_N(new_X)
         
-        if on_backbone<0.5 and on_R3<0.5:  # not on R3 NOR backbone
-            if new_X>Xmax*self.beta or new_X<Xmin*self.beta:  # coming on to backbone with overprojection by Beta
-                on_backbone=1
-                    
-        if on_backbone<0.5 and on_R3>0.5:  # on R3 , get out of R3 by going to backbone
-            if new_X>Xmax or new_X<Xmin:  # coming on to backbone 
-                on_backbone=1
-                on_R3=0
+        # on unloading path from backbone 4
+        if PathID==4:
+            if self.CuX>0:
+                # find intersection of unloading from positive to pinching line
+                inX,inY=Line_interXY(self.r3*self.k0,self.CuX,self.CuF,self.r4*self.k0,0,-self.F1)
 
-        if on_R3>0.5:  #on R3, get out of R3 by going back to R4
-            # calculate limits of unloading R3
-            UnloadF_P=self.__Backbone(UnloadX_P)
-            UnloadF_N=self.__Backbone(UnloadX_N)
-            XY_P=Line_interXY(self.k0*self.r4,0,-self.F1,self.k0*self.r3,UnloadX_P,UnloadF_P)
-            XY_N=Line_interXY(self.k0*self.r4,0,self.F1,self.k0*self.r3,UnloadX_N,UnloadF_N)
+                if new_X>unloadX_P:
+                    maxX=new_X
+                    New_PathID=0
+                    Res=self.__Backbone(new_X)
+                if new_X<unloadX_P and new_X>inX:
+                    Res=self.__Backbone_unload_P(new_X)
+                if new_X<inX:
+                    New_PathID=3
+                    Res=self.__Pinch_lower(new_X)
+            
+            if self.CuX<0:
+                # find intesection of unloading from negative to pinching line
+                inX,inY=Line_interXY(self.r3*self.k0,self.CuX,self.CuF,self.r4*self.k0,0,self.F1)
+                
+                if new_X<unloadX_N:
+                    minX=new_X
+                    New_PathID=1
+                    Res=self.__Backbone(new_X)
+                if new_X>unloadX_N and new_X<inX:
+                    Res=self.__Backbone_unload_N(new_X)
+                if new_X>inX:
+                    New_PathID=2
+                    Res=self.__Pinch_upper(new_X)
 
-            if self.CuX>XY_P[0] and new_X<XY_P[0]:
-                on_R3=0
-            if self.Cux<XY_N[0] and new_X>XY_N[0]:
-                on_R3=0
+        # on upper r4 path 2
+        if PathID==2:
+            tar_X=self.beta*self.tracker[1]
+            
+            if DX>0 and new_X>tar_X:
+                maxX=new_X
+                New_PathID=0
+                Res=self.__Backbone(new_X)
+            if DX>0 and new_X<tar_X:
+                Res=self.__Pinch_upper(new_X)
+            if DX<0:
+                New_PathID=5
+                unloadX=self.CuX
+                unloadF=self.CuF
+                Res=self.__General_unload(new_X)
+            
+        # on lower r4 path 3
+        if PathID==3:
+            tar_X=self.beta*self.tracker[3]
+            
+            if DX<0 and new_X<tar_X:
+                minX=new_X
+                New_PathID=1
+                Res=self.__Backbone(new_X)
+            if DX<0 and new_X>tar_X:
+                Res=self.__Pinch_lower(new_X)
+            if DX>0:
+                New_PathID=5
+                unloadX=self.CuX
+                unloadF=self.CuF
+                Res=self.__General_unload(new_X)
 
-        if new_X>Xmax:
-            Xmax=new_X
-        if new_X<Xmin:
-            Xmin=new_X      # Note, we are not updating tracker, only return the tracker IF we move to new_X
+        # on general unloading path 5
+        if PathID==5:
+            # calculate forces from path 2, 3, 5
+            F_p2=self.__Pinch_upper(new_X)
+            F_p3=self.__Pinch_lower(new_X)
+            F_p5=self.CuF+(new_X-self.CuX)*self.k0*self.r3
+            if F_p5<=F_p2 and F_p5>=F_p3:
+                Res=F_p5
+            if F_p5>F_p2:
+                New_PathID=2
+                Res=F_p2
+            if F_p5<F_p3:
+                New_PathID=3
+                Res=F_p3
+        
+        # make sure there is no overshooting  # no need to bound force if just want to do tracker
+        #temp=self.__Backbone(new_X)
+        #if new_X>self.xu and Res>temp:
+        #    Res=temp
+        #if new_X<-self.xu and Res<temp:
+        #    Res=temp
 
-
-        return [Xmax, UnloadX_P, Xmin, UnloadX_N, on_backbone, on_R3]
+        return [maxX,unloadX_P,minX,unloadX_N,unloadX,unloadF,New_PathID]
     
     def GetK0(self):
         return self.k0
@@ -673,8 +779,11 @@ class Model_file_SDOF(Model_file):
         #SDOF file format
         #1 1 (indicating model type)
         #2 mass
-        #3 Sprtype 1-linear  2-bilinear
-        #4 SprParameters k0. Or  k0 ky Dy
+        #3 Sprtype 1-linear  2-bilinear  3-CUREE
+        #4 SprParameters 
+        # 1 k0. 
+        # 2 k0 ky Dy
+        # 3 k0 xu F0 F1 r1 r2 r3 r4 alpha beta 
 
     def SaveFile(self, fileLoc):
         with open(fileLoc, 'w') as file:
@@ -840,25 +949,7 @@ class Model_Dyn_SDOF(Model_Dyn):
 
     def HystPlot(self, Spr_ID, canvas):
         
-        X=self.Spr.X
-        Y=self.Spr.F
-
-        print(len(X))
-        print(len(Y))
-
-        # Scale the data points to fit within the canvas
-        x_min, x_max = min(X), max(X)
-        y_min, y_max = min(Y), max(Y)
-
-        for i in range(len(X) - 1):
-            # Map X and Y to canvas coordinates for each pair of adjacent points
-            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
-            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
-
-            # Draw a line segment connecting adjacent data points
-            canvas.create_line(x1, y1, x2, y2, fill="blue")
+        self.Spr.HysPlot(canvas)  #SDOF model has only 1 spring, so Spr_ID is not used
      
 
 
