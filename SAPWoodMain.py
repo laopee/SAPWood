@@ -4,7 +4,7 @@
 # sub routines to do push over or time history analysis or time history analysis
 # GUIs to control analysis and display results
 import SAPWoodClass as SP
-
+import numpy as np
 
 import tkinter as tk
 from tkinter import ttk
@@ -36,6 +36,10 @@ def load_eq():
     EQ_current.LoadEQ(filename)
     #print(EQ_current.Ax[3])
     #print(EQ_current.Ay[5])
+
+def Load_pro():
+    filename=tk.filedialog.askopenfilename()
+    Pro_current.LoadPro(filename)
 
 def PlotAx():
     plot_xy_on_existing_canvas(Figure_Ax,EQ_current.t,EQ_current.Ax)
@@ -91,7 +95,29 @@ def Plot_hys():
 
 def Spring_Push():
     global Spr_current, Pro_current
-    # 
+    
+    # findout what spring type is selected from  Combobox_SprType
+    springType=Combobox_SprType.current()+1
+
+    print(springType)
+
+    # initialize the spring
+    Spr_current=SP.Assign_Spr(springType)
+
+    # assign spring parameters from textbox
+    temp=Tb4_text.get("1.0", "end-1c")
+    parameters=np.fromstring(temp, dtype=float, sep=" ")
+    Spr_current.SetParameter(parameters)
+
+    # get scale factor for protocol
+    temp=text4.get("1.0", "end-1c")
+
+    scalefactor=float(temp)
+    # push it
+    Spr_current.Protocal_Push(Pro_current,scalefactor)
+    # plot it
+    Figure_Hys.delete('all')
+    Spr_current.HysPlot(Figure_Hys)
 
 #__________end of button functions
 
@@ -191,10 +217,23 @@ button_game=tk.Button(tab3,text="Random ADV")
 button_game.pack()
 
 # tab 4
-button_push=tk.Button(tab4,text="push it",command=Plot_hys)
+values = ['Linear', 'Bilinear', 'CUREE','EPHM','Multi-Lin','Compression only','Tension only']
+Combobox_SprType = ttk.Combobox(tab4, values=values)
+Combobox_SprType.pack()
+
+Tb4_text=tk.Text(tab4,height=1)
+Tb4_text.pack()
+
+button_load_pro=tk.Button(tab4,text="Load Protocol",command=Load_pro)
+button_load_pro.pack()
+
+button_push=tk.Button(tab4,text="Show Hys",command=Plot_hys)
 button_push.pack()
 
-text4 = tk.Text(tab4, font=("Purisa", 12),height=4,width=40)
+button_push1=tk.Button(tab4,text="Pro-Push",command=Spring_Push)
+button_push1.pack()
+
+text4 = tk.Text(tab4, font=("Purisa", 12),height=1,width=40)
 text4.pack()
 
 Figure_Hys = tk.Canvas(tab4, width=400, height=300)

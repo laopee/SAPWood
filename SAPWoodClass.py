@@ -4,6 +4,68 @@ import os as os
 import math as math
 from tkinter import ttk
 
+# Utility functions used in classes
+def plot_on_canvas(X, Y, canvas):  
+    """
+    Plots paired vectors X and Y on a canvas.
+
+    Args:
+        X (list): List of X-coordinates.
+        Y (list): List of Y-coordinates.
+        canvas (tk.Canvas): The canvas object to draw on.
+    """
+    # Determine the canvas dimensions
+    canvas_width = canvas.winfo_reqwidth()
+    canvas_height = canvas.winfo_reqheight()
+
+    # Find the minimum and maximum values for X and Y
+    x_min, x_max = min(X), max(X)
+    y_min, y_max = min(Y), max(Y)
+
+    # Scale the data to fit within the canvas
+    x_scale = canvas_width / (x_max - x_min)
+    y_scale = canvas_height / (y_max - y_min)
+
+    # Create a blue line connecting the data points
+    for i in range(len(X) - 1):
+        x1 = (X[i] - x_min) * x_scale
+        y1 = canvas_height - (Y[i] - y_min) * y_scale
+        x2 = (X[i + 1] - x_min) * x_scale
+        y2 = canvas_height - (Y[i + 1] - y_min) * y_scale
+        canvas.create_line(x1, y1, x2, y2, fill="blue", width=2)
+
+    # Mark the X and Y axes in red
+    canvas.create_line(0, canvas_height - (0 - y_min) * y_scale, canvas_width, canvas_height - (0 - y_min) * y_scale, fill="red", width=2)
+    canvas.create_line((0 - x_min) * x_scale, 0, (0 - x_min) * x_scale, canvas_height, fill="red", width=2)
+
+# Assign spring based on ID   
+def Assign_Spr(ID:int):
+    if ID==1:
+        return Spr_Linear()
+    if ID==2:
+        return Spr_Bilinear()
+    if ID==3:
+        return Spr_CUREE()
+    if ID==4:
+        return Spr_EPHM()
+    if ID==5:
+        return Spr_Multilinear()
+    if ID==6:
+        return Spr_CompOnly()
+    if ID==7:
+        return Spr_TensionOnly()
+    
+
+def Line_interXY(k1,x1,y1,k2,x2,y2):
+    if abs(k1-k2)<1e-10:
+        print('parallel line dont intersect')
+        return x1,y1
+    else:
+        x=((k1 * x1 - k2 * x2) - (y1 - y2)) / (k1 - k2)
+        y=k1*(x-x1)+y1
+        return x,y
+    
+# end of all Utility functions in this class
 
 # Earthquake class EQ
 class Earthquake:
@@ -77,6 +139,13 @@ class Protocols:
             e=-e
             ii+=1
             self.value=np.append(self.value,temp)
+    
+    def LoadPro(self,filename):
+        temp=np.loadtxt(filename)
+        self.value=temp
+        self.max=np.max(abs(temp))        
+        #  print("something wrong with Protocol file, pls check")
+
 
 # General loading class Load
 
@@ -193,41 +262,25 @@ class Spring:
     def HysPlot(self,canvas):
         X=self.X
         Y=self.F
-
-        print(len(X))
-        print(len(Y))
+        plot_on_canvas(X,Y,canvas)
 
         # Scale the data points to fit within the canvas
-        x_min, x_max = min(X), max(X)
-        y_min, y_max = min(Y), max(Y)
+        #x_min, x_max = min(X), max(X)
+        #y_min, y_max = min(Y), max(Y)
 
-        for i in range(len(X) - 1):
-            # Map X and Y to canvas coordinates for each pair of adjacent points
-            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
-            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #for i in range(len(X) - 1):
+        #    # Map X and Y to canvas coordinates for each pair of adjacent points
+        #    x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #    y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #    x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #    y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
 
-            # Draw a line segment connecting adjacent data points
-            canvas.create_line(x1, y1, x2, y2, fill="blue")
+        #    # Draw a line segment connecting adjacent data points
+        #    canvas.create_line(x1, y1, x2, y2, fill="blue")
+        
+        #want to add axis, maybe later. canvas.create_line(0,y_min,0,y_max,fill="red")
 
-# Assign spring based on ID   
-def Assign_Spr(ID:int):
-    if ID==1:
-        return Spr_Linear()
-    if ID==2:
-        return Spr_Bilinear()
-    if ID==3:
-        return Spr_CUREE()
 
-def Line_interXY(k1,x1,y1,k2,x2,y2):
-    if abs(k1-k2)<1e-10:
-        print('parallel line dont intersect')
-        return x1,y1
-    else:
-        x=((k1 * x1 - k2 * x2) - (y1 - y2)) / (k1 - k2)
-        y=k1*(x-x1)+y1
-        return x,y
 
 # Spring sub class Spr_Linear  ID=1
 class Spr_Linear(Spring):
@@ -669,7 +722,23 @@ class Spr_CUREE(Spring):
     def GetK0(self):
         return self.k0
 # Spring sub class Spr_EPHM   ID=4
-
+class Spr_EPHM(Spring):
+    def SetParameter(self, inputP):
+        self.type=4
+        self.parameter=inputP
+        self.CuK=1  #set initial k as k0
+        
+    def init_tracker(self):  # there is no need to track
+        self.tracker=0
+        
+    def GetNewForce(self,new_X):
+        return 0
+    
+    def Estimate_tracker(self,new_X):
+        return 0
+    
+    def GetK0(self):
+        return self.parameter[0]
 # Spring sub class Spr_MultiLinear    ID=5
 class Spr_Multilinear(Spring):
     # Multilinear spring has N parameters
