@@ -154,7 +154,7 @@ class Protocols:
 
     def Refine(self,N_step): # refine current protocol values with N substep
         # Calculate the step size for interpolation
-        step = 1 / (N_step+ 1)
+        #step = 1 / (N_step+ 1)
         X=self.value0
 
         # Initialize an empty array for interpolated points
@@ -803,7 +803,6 @@ class Spr_Multilinear(Spring):
     
     def GetK0(self):
         return self.parameter[0]
-
 # Spring sub class Spr_CompOnly    ID=6
 class Spr_CompOnly(Spring):
     # Comp only spring has 1 parameters
@@ -866,8 +865,6 @@ class Model_file:
     def To_str(self)-> str:
         pass
 
-
-
 class Model_file_SDOF(Model_file):
     
     def __init__(self) -> None:
@@ -914,6 +911,58 @@ class Model_file_SDOF(Model_file):
         tempstr+="\t".join(str(f) for f in self.spr_parameter)
         return tempstr
 
+class Model_file_sbld(Model_file):
+    def __init__(self) -> None:
+        self.type=2  # file type is 2 now
+        self.mass=0
+        self.spr_type=0
+        self.spr_parameter=[]
+
+    def LoadFile(self, lines):        
+        
+        self.type=int(lines[0].strip())
+        temp=lines[1].strip()
+        self.mass=[float(num) for num in temp.split()]
+        temp=lines[2].strip()
+        self.spr_type=[float(num) for num in temp.split()]
+        
+        for ii in range(len(self.mass)):
+            temp=lines[ii+2].strip()
+            self.spr_parameter[ii]=[float(num) for num in temp.split()]
+
+        #sbld file format
+        #1 2 (indicating model type)
+        #2 mass1 mass2 mass3 ... massN
+        #3 Sprtype1 Sprtype2 ... SprtypeN 1-linear  2-bilinear  3-CUREE
+        #4 SprParameters[0] for sp1
+        #5 SprParameters[1] for sp1
+        #...
+        #N+3 SprParameters[N-1] for spN
+
+        # 1 k0. 
+        # 2 k0 ky Dy
+        # 3 k0 xu F0 F1 r1 r2 r3 r4 alpha beta 
+
+    def SaveFile(self, fileLoc):
+        with open(fileLoc, 'w') as file:
+            file.write(self.To_str())
+            
+    def To_str(self) -> str:
+        tempstr=""
+        tempstr+=str(self.type)+"\n"
+        for ii in range(len(self.mass)):
+            tempstr+=str(self.mass[ii])
+        tempstr+="\n"
+        for ii in range(len(self.spr_type)):
+            tempstr+=str(self.spr_type[ii])
+        tempstr+="\n"
+
+        for ii in range(len(self.spr_type)):
+            tempstr+="\t".join(str(f) for f in self.spr_parameter[ii])
+            tempstr+="\n"
+        
+        return tempstr
+    
 # Model_Dyn super class Model
 class Model_Dyn:
 
@@ -938,7 +987,6 @@ class Model_Dyn:
 
     def HystPlot(self,Spr_ID,canvas):
         pass        # plot any spring element's hystersis
-
 
 # Model sub class Model_SDOF
 class Model_Dyn_SDOF(Model_Dyn):
@@ -1039,31 +1087,145 @@ class Model_Dyn_SDOF(Model_Dyn):
         X=self.time
         Y=self.GlobalX
 
-        print(len(X))
-        print(len(Y))
+        plot_on_canvas(X,Y,canvas)
 
-        # Scale the data points to fit within the canvas
-        x_min, x_max = min(X), max(X)
-        y_min, y_max = min(Y), max(Y)
-
-        for i in range(len(X) - 1):
-            # Map X and Y to canvas coordinates for each pair of adjacent points
-            x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
-            x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
-            y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
-
-            # Draw a line segment connecting adjacent data points
-            canvas.create_line(x1, y1, x2, y2, fill="blue")
+        # print(len(X))
+        # print(len(Y))
+        # # Scale the data points to fit within the canvas
+        # x_min, x_max = min(X), max(X)
+        # y_min, y_max = min(Y), max(Y)
+        # for i in range(len(X) - 1):
+        #     # Map X and Y to canvas coordinates for each pair of adjacent points
+        #     x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #     y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #     x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #     y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #     # Draw a line segment connecting adjacent data points
+        #     canvas.create_line(x1, y1, x2, y2, fill="blue")
 
     def HystPlot(self, Spr_ID, canvas):
         
         self.Spr.HysPlot(canvas)  #SDOF model has only 1 spring, so Spr_ID is not used
-     
-
-
+   
 # Model sub class Model_ShearBld
+class Model_Dyn_sbld(Model_Dyn):
+    def __init__(self):
+        self.type=2
+        self.time=[]
+        self.Spr=Spring()  # we don't know what spring type here, do that in construct
+        self.mass=0
+        self.dampR=0
+        self.GlobalX=[]
+        self.GlobalV=[]
+        self.GlobalA=[]
+        self.CurrentIndex=0
 
+        self.CuX=0
+        self.CuV=0
+        self.CuA=0
+
+    def Construct(self, Modelfile: Model_file_SDOF):
+        self.mass=Modelfile.mass
+        self.Spr=Assign_Spr(Modelfile.spr_type)
+        self.Spr.SetParameter(Modelfile.spr_parameter)
+
+    def Initialize(self):
+        self.CurrentIndex=0
+        self.GlobalX=[0]
+        self.GlobalV=[0]
+        self.GlobalA=[0]
+        self.time=[0]
+        self.Spr.ClearMemory()
+
+        self.CuX=0
+        self.CuV=0
+        self.CuA=0
+
+        self.PaX=0
+        self.PaV=0
+        self.PaA=0
+
+    def Analysis_NB(self, EQ: Earthquake, ScaleFactor, DampR, timeStep, Pro_Bar:ttk.Progressbar, WriteSpringOK):
+        # basic parameter
+        Beta=1/6
+        damping=2*math.sqrt(self.mass*self.Spr.CuK)*DampR
+        # remap ground motion into timestep
+        Tmax=max(EQ.t)
+        tt=np.arange(0,Tmax,timeStep)
+        Ft=self.mass*EQ.Ax*ScaleFactor
+        Ftt=np.interp(tt,EQ.t,Ft)
+
+        nn=len(tt)
+        # set up progress bar
+        Pro_Bar["maximum"]=nn
+        for ii in range(len(tt)-1):
+            Df=Ftt[ii+1]-Ftt[ii]
+            Df_b=Df+self.CuV*(self.mass/timeStep/Beta+damping/2/Beta)+self.CuA*(self.mass/2/Beta-damping*timeStep*(1-1/4/Beta))
+            K_b=self.Spr.CuK+self.mass/Beta/timeStep/timeStep+damping/2/Beta/timeStep
+
+            D_x=Df_b/K_b
+            D_v=D_x/2/Beta/timeStep-self.CuV/2/Beta+self.CuA*timeStep*(1-1/4/Beta)
+
+            #update model X and V
+            self.PaX=self.CuX
+            self.PaV=self.CuV
+            self.CuX=self.PaX+D_x
+            self.CuV=self.PaV+D_v
+
+
+            #for all springs in the model calculate new properties
+            # potentially you can implement sub-step here
+            
+            # turn model level X into spring level x
+            temp_newTrack=self.Spr.Estimate_tracker(self.CuX)   #get new tracker
+            temp_newF=self.Spr.GetNewForce(self.CuX)  #get new spring force
+            temp_newK=self.Spr.EstimateK(self.CuX)      #get new spring K
+            
+            #with spring new forces, update model A
+            self.PaA=self.CuA
+            self.CuA=(Ftt[ii+1]-damping*self.CuV-temp_newF)/self.mass
+
+            #update Springs
+            self.Spr.Push(self.CuX,self.CuV,self.CuA,temp_newF,temp_newK,temp_newTrack)
+            if WriteSpringOK:  #write Spring data if desired
+                self.Spr.WriteCurrent()
+            
+            #write in model vectors
+            self.GlobalX=np.append(self.GlobalX,self.CuX)
+            self.GlobalV=np.append(self.GlobalV,self.CuV)
+            self.GlobalA=np.append(self.GlobalA,self.CuA)
+            self.time=np.append(self.time,tt[ii+1])
+
+            #progress bar
+            Pro_Bar["value"]=ii
+            Pro_Bar.update()
+            #might need to get root or pbar to update
+
+    def DofPlot(self, DOF_ID, canvas):
+        
+        X=self.time
+        Y=self.GlobalX
+
+        plot_on_canvas(X,Y,canvas)
+
+        # print(len(X))
+        # print(len(Y))
+        # # Scale the data points to fit within the canvas
+        # x_min, x_max = min(X), max(X)
+        # y_min, y_max = min(Y), max(Y)
+        # for i in range(len(X) - 1):
+        #     # Map X and Y to canvas coordinates for each pair of adjacent points
+        #     x1 = (X[i] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #     y1 = canvas.winfo_height() - (Y[i] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #     x2 = (X[i + 1] - x_min) * canvas.winfo_width() / (x_max - x_min)
+        #     y2 = canvas.winfo_height() - (Y[i + 1] - y_min) * canvas.winfo_height() / (y_max - y_min)
+        #     # Draw a line segment connecting adjacent data points
+        #     canvas.create_line(x1, y1, x2, y2, fill="blue")
+
+    def HystPlot(self, Spr_ID, canvas):
+        
+        self.Spr.HysPlot(canvas)  #SDOF model has only 1 spring, so Spr_ID is not used
+   
 # Model sub class Model_Biaxial
 
 # Model sub class Model_6DOF
