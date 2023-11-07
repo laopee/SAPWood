@@ -1124,10 +1124,13 @@ class Model_Dyn_sbld(Model_Dyn):
         self.CuV=0
         self.CuA=0
 
-    def Construct(self, Modelfile: Model_file_SDOF):
+    def Construct(self, Modelfile: Model_file_sbld):
         self.mass=Modelfile.mass
-        self.Spr=Assign_Spr(Modelfile.spr_type)
-        self.Spr.SetParameter(Modelfile.spr_parameter)
+        self.Spr_type=Modelfile.spr_type
+
+        for ii in range(len(self.Spr_type)):
+            self.Spr[ii]=Assign_Spr(self.Spr_type[ii])
+            self.Spr[ii].SetParameter(Modelfile.spr_parameter[ii])
 
     def Initialize(self):
         self.CurrentIndex=0
