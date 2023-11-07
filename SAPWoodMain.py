@@ -107,12 +107,18 @@ def Spring_Push():
     # assign spring parameters from textbox
     temp=Tb4_text.get("1.0", "end-1c")
     parameters=np.fromstring(temp, dtype=float, sep=" ")
+    print(parameters)
     Spr_current.SetParameter(parameters)
 
     # get scale factor for protocol
     temp=text4.get("1.0", "end-1c")
-
     scalefactor=float(temp)
+
+    # refine the protocol if needed
+    temp=text4N.get("1.0", "end-1c")
+    Nstep=int(temp)
+    if Nstep>1:
+        Pro_current.Refine(Nstep)
     # push it
     Spr_current.Protocal_Push(Pro_current,scalefactor)
     # plot it
@@ -238,5 +244,9 @@ text4.pack()
 
 Figure_Hys = tk.Canvas(tab4, width=400, height=300)
 Figure_Hys.pack(fill=tk.X)
+
+text4N = tk.Text(tab4, font=("Purisa", 12),height=1,width=10)
+text4N.pack()
+text4N.insert("1.0","1")
 
 root.mainloop()

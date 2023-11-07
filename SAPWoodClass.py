@@ -22,6 +22,10 @@ def plot_on_canvas(X, Y, canvas):
     x_min, x_max = min(X), max(X)
     y_min, y_max = min(Y), max(Y)
 
+    print('limits:',x_min,x_max,y_min,y_max)
+    print('length:',len(X),len(Y))
+    #print(Y)
+
     # Scale the data to fit within the canvas
     x_scale = canvas_width / (x_max - x_min)
     y_scale = canvas_height / (y_max - y_min)
@@ -116,8 +120,9 @@ class Protocols:
 
     def __init__(self):
         self.step_size=0.01
-        self.value=np.arange(0,1,self.step_size) # by default this will be a monotonic protocol from 0 to 1 with given step size
+        self.value0=np.arange(0,1,self.step_size) # by default this will be a monotonic protocol from 0 to 1 with given step size
         self.max=1
+        self.value=self.value0 #value0 is the original data, value is what is refined and used
         
     def changeStepSize(self,newsize):
         self.step_size=newsize
@@ -142,10 +147,27 @@ class Protocols:
     
     def LoadPro(self,filename):
         temp=np.loadtxt(filename)
-        self.value=temp
-        self.max=np.max(abs(temp))        
+        self.value0=temp
+        self.max=np.max(abs(temp))  
+        self.value=self.value0 #value0 is the original data, value is what is refined and used      
         #  print("something wrong with Protocol file, pls check")
 
+    def Refine(self,N_step): # refine current protocol values with N substep
+        # Calculate the step size for interpolation
+        step = 1 / (N_step+ 1)
+        X=self.value0
+
+        # Initialize an empty array for interpolated points
+        X_combined = []
+
+        # Interpolate between each pair of consecutive elements
+        for i in range(len(X) - 1):
+            x_start, x_end = X[i], X[i + 1]
+            X_interp = np.linspace(x_start, x_end, N_step + 2,endpoint=False)
+            # Combine original X values with interpolated points
+            X_combined = np.append(X_combined,X_interp)
+
+        self.value=X_combined
 
 # General loading class Load
 
@@ -184,7 +206,7 @@ class Spring:
         # dont touch anything, dont update any variables, just hypothetically go to X
         new_F=self.GetNewForce(new_X)
         if abs(new_X-self.CuX)<1e-10:
-            print("divide by 0")
+            print("divide by 0, CuK unchanged")
             return self.CuK
         else:
             return (new_F-self.CuF)/(new_X-self.CuX)
@@ -232,7 +254,7 @@ class Spring:
     
     def Protocal_Push(self,pro,scale):  #just do disp-control push of a spring
         
-        self.__init__()
+        self.ClearMemory()
         self.init_tracker()
         
         xx=pro.value*scale   #pro is protocol object
@@ -242,6 +264,7 @@ class Spring:
             tempT=self.Estimate_tracker(xx[ii])
 
             self.Push(xx[ii],0,0,tempF,tempK,tempT)
+            self.WriteCurrent()
     
     #following are functions passed to specific class
 
@@ -262,6 +285,7 @@ class Spring:
     def HysPlot(self,canvas):
         X=self.X
         Y=self.F
+
         plot_on_canvas(X,Y,canvas)
 
         # Scale the data points to fit within the canvas
@@ -287,20 +311,23 @@ class Spr_Linear(Spring):
     # linear spring has only 1 parameter k
     def SetParameter(self, inputP):
         self.parameter=inputP
-        self.CuK=self.parameter[0]  #set initial k as k
+        self.CuK=self.parameter  #set initial k as k
         self.type=1
         
     def init_tracker(self):
         self.tracker=0
         
     def GetNewForce(self,new_X):
-        return new_X*self.parameter[0]
+        #print(self.parameter[0])
+        #print('inside linear get force')
+        #print(self.CuK)
+        return new_X*self.parameter
     
     def Estimate_tracker(self,new_X):
         return 0
     
     def GetK0(self):
-        return self.parameter[0]
+        return self.parameter
 
 # Spring sub class Spr_Bilinear   ID=2
 class Spr_Bilinear(Spring):
@@ -408,38 +435,40 @@ class Spr_CUREE(Spring):
         # find the F on the envelope curve given xx
         # xx can be + or -
         temp=0.1
-        if xx <= self.xu:
-            #print(-self.k0 * xx / self.F0)
-            temp=(self.F0 + self.k0 * self.r1 * xx) * (1 - math.exp(-self.k0 * xx / self.F0))
-
         Fu = (self.F0 + self.k0 * self.r1 * self.xu) * (1 - math.exp(-self.k0 * self.xu / self.F0))
-        x_end=self.xu+Fu/self.k0/self.r2
+        x_end=self.xu-Fu/self.k0/self.r2
+        abxx=abs(xx)
 
-        if xx > self.xu and xx<x_end:
-            temp=Fu + (xx - self.xu) * self.k0 * self.r2
+        if abxx <= self.xu:
+            #print(-self.k0 * xx / self.F0)
+            temp=(self.F0 + self.k0 * self.r1 * abxx) * (1 - math.exp(-self.k0 * abxx / self.F0))
+
+        if abxx > self.xu and abxx<x_end:
+            temp=Fu + (abxx - self.xu) * self.k0 * self.r2
         
-        if xx>=x_end:
+        if abxx>=x_end:
             temp=0.1
         
         return np.sign(xx)*temp
     
-    def __Backbone_unload_P(self,xx):
+    def __Backbone_unload_P(self,xx,unload_X):
         # this subroutine will find F on unloading path given xx
         # this only works for positive
-        unload_X=self.tracker[1]
+        # you should not get this from tracker as it was not updatedunload_X=self.tracker[1]
         unload_F=self.__Backbone(unload_X)
         return unload_F+(xx-unload_X)*self.k0*self.r3
     
-    def __Backbone_unload_N(self,xx):
+    def __Backbone_unload_N(self,xx,unload_X):
         # this subroutine will find F on unloading path given xx
         # this only works for negative
-        unload_X=self.tracker[3]
+        
         unload_F=self.__Backbone(unload_X)
         return unload_F+(xx-unload_X)*self.k0*self.r3
     
     def __Pinch_lower(self,xx):
         # this return F on lower piching line and Kp line
         # calculated the target point on the backbone
+
         tar_X=self.beta*self.tracker[3]
         tar_F=self.__Backbone(tar_X)
         #print(tar_X)
@@ -450,7 +479,8 @@ class Spr_CUREE(Spring):
         # find the intersection of the r4 and kp line
         inX,inY=Line_interXY(kp,tar_X,tar_F,self.k0*self.r4,0,-self.F1)
 
-        if xx<inX:
+        # print('intX=',inX,kp,tar_X,tar_F)
+        if xx<inX and xx<-3*self.F1/self.k0:
             return tar_F+(xx-tar_X)*kp
         else:
             return xx*self.k0*self.r4-self.F1
@@ -468,15 +498,15 @@ class Spr_CUREE(Spring):
         # find the intersection of the r4 and kp line
         inX,inY=Line_interXY(kp,tar_X,tar_F,self.k0*self.r4,0,self.F1)
 
-        if xx>inX:
+        if xx>inX and xx>3*self.F1/self.k0:
             return tar_F+(xx-tar_X)*kp
         else:
             return xx*self.k0*self.r4+self.F1
-    def __General_unload(self,xx):
+    def __General_unload(self,xx,unloadX,unloadF):
         # this return F for all unloading r3 line NOT from backbone
         # get current unload x and f and find force
 
-        return self.tracker[5]+self.r3*self.k0*(xx-self.tracker[4])
+        return unloadF+self.r3*self.k0*(xx-unloadX)
     
 
     def GetNewForce(self, new_X):
@@ -491,7 +521,10 @@ class Spr_CUREE(Spring):
 
         Res=0
 
-        print('Path=',PathID)
+        New_PathID=PathID
+
+        #print('Path=',PathID,'X=',self.CuX,'Y=',self.CuF)
+        #print('track=',self.tracker)
 
         # on positive back bone  0
         if PathID==0 and DX>=0:
@@ -501,7 +534,7 @@ class Spr_CUREE(Spring):
         if PathID==0 and DX<0:
             unloadX_P=self.CuX
             New_PathID=4
-            Res=self.__Backbone_unload_P(new_X)
+            Res=self.__Backbone_unload_P(new_X,unloadX_P)
         
         # on negative back bone   1
         if PathID==1 and DX<=0:
@@ -511,7 +544,7 @@ class Spr_CUREE(Spring):
         if PathID==1 and DX>0:
             unloadX_N=self.CuX
             New_PathID=4
-            Res=self.__Backbone_unload_N(new_X)
+            Res=self.__Backbone_unload_N(new_X,unloadX_N)
         
         # on unloading path from backbone 4
         if PathID==4:
@@ -524,7 +557,7 @@ class Spr_CUREE(Spring):
                     New_PathID=0
                     Res=self.__Backbone(new_X)
                 if new_X<unloadX_P and new_X>inX:
-                    Res=self.__Backbone_unload_P(new_X)
+                    Res=self.__Backbone_unload_P(new_X,unloadX_P)
                 if new_X<inX:
                     New_PathID=3
                     Res=self.__Pinch_lower(new_X)
@@ -538,7 +571,7 @@ class Spr_CUREE(Spring):
                     New_PathID=1
                     Res=self.__Backbone(new_X)
                 if new_X>unloadX_N and new_X<inX:
-                    Res=self.__Backbone_unload_N(new_X)
+                    Res=self.__Backbone_unload_N(new_X,unloadX_N)
                 if new_X>inX:
                     New_PathID=2
                     Res=self.__Pinch_upper(new_X)
@@ -546,8 +579,10 @@ class Spr_CUREE(Spring):
         # on upper r4 path 2
         if PathID==2:
             tar_X=self.beta*self.tracker[1]
+            if tar_X<3*self.F1/self.k0:
+                tar_X=3*self.F1/self.k0
             
-            if DX>0 and new_X>tar_X:
+            if DX>0 and new_X>=tar_X:
                 maxX=new_X
                 New_PathID=0
                 Res=self.__Backbone(new_X)
@@ -557,13 +592,15 @@ class Spr_CUREE(Spring):
                 New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                Res=self.__General_unload(new_X)
+                Res=self.__General_unload(new_X,unloadX,unloadF)
             
         # on lower r4 path 3
         if PathID==3:
             tar_X=self.beta*self.tracker[3]
+            if tar_X>-3*self.F1/self.k0:
+                tar_X=-3*self.F1/self.k0
             
-            if DX<0 and new_X<tar_X:
+            if DX<0 and new_X<=tar_X:
                 minX=new_X
                 New_PathID=1
                 Res=self.__Backbone(new_X)
@@ -573,7 +610,7 @@ class Spr_CUREE(Spring):
                 New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                Res=self.__General_unload(new_X)
+                Res=self.__General_unload(new_X,unloadX,unloadF)
 
         # on general unloading path 5
         if PathID==5:
@@ -596,6 +633,9 @@ class Spr_CUREE(Spring):
             Res=temp
         if new_X<-self.xu and Res<temp:
             Res=temp
+        
+        # print('NPath=',New_PathID,'NX=',new_X,'NY=',Res)
+        # print('newK=',(Res-self.CuF)/(new_X-self.CuX))
 
         return Res
  
@@ -621,7 +661,7 @@ class Spr_CUREE(Spring):
         if PathID==0 and DX<0:
             unloadX_P=self.CuX
             New_PathID=4
-            Res=self.__Backbone_unload_P(new_X)
+            Res=self.__Backbone_unload_P(new_X,unloadX_P)
         
         # on negative back bone   1
         if PathID==1 and DX<=0:
@@ -631,7 +671,7 @@ class Spr_CUREE(Spring):
         if PathID==1 and DX>0:
             unloadX_N=self.CuX
             New_PathID=4
-            Res=self.__Backbone_unload_N(new_X)
+            Res=self.__Backbone_unload_N(new_X,unloadX_N)
         
         # on unloading path from backbone 4
         if PathID==4:
@@ -644,7 +684,7 @@ class Spr_CUREE(Spring):
                     New_PathID=0
                     Res=self.__Backbone(new_X)
                 if new_X<unloadX_P and new_X>inX:
-                    Res=self.__Backbone_unload_P(new_X)
+                    Res=self.__Backbone_unload_P(new_X,unloadX_P)
                 if new_X<inX:
                     New_PathID=3
                     Res=self.__Pinch_lower(new_X)
@@ -658,7 +698,7 @@ class Spr_CUREE(Spring):
                     New_PathID=1
                     Res=self.__Backbone(new_X)
                 if new_X>unloadX_N and new_X<inX:
-                    Res=self.__Backbone_unload_N(new_X)
+                    Res=self.__Backbone_unload_N(new_X,unloadX_N)
                 if new_X>inX:
                     New_PathID=2
                     Res=self.__Pinch_upper(new_X)
@@ -677,7 +717,7 @@ class Spr_CUREE(Spring):
                 New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                Res=self.__General_unload(new_X)
+                Res=self.__General_unload(new_X,unloadX,unloadF)
             
         # on lower r4 path 3
         if PathID==3:
@@ -693,7 +733,7 @@ class Spr_CUREE(Spring):
                 New_PathID=5
                 unloadX=self.CuX
                 unloadF=self.CuF
-                Res=self.__General_unload(new_X)
+                Res=self.__General_unload(new_X,unloadX,unloadF)
 
         # on general unloading path 5
         if PathID==5:
